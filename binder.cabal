@@ -1,0 +1,56 @@
+cabal-version:      3.4
+name:               binder
+version:            0.0.0.0
+synopsis:           Variable binding for abstract syntax tree
+description:
+    binder is purely functional implementation of Ocaml's bindlib.
+    <https://github.com/rlepigre/ocaml-bindlib>
+    It follows the style of higher-order abstract syntax,
+    and offers the representation of abstract syntax tree.
+license:            MIT
+license-file:       LICENSE
+author:             Keito Kajitani
+maintainer:         ijaketak@gmail.com
+copyright:          (c) 2023 Keito Kajitani
+homepage:           https://github.com/ijaketak/binder
+category:           Data
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common depends
+    build-depends:
+          containers
+        , text
+        , transformers
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           depends, warnings
+    exposed-modules:
+          Data.Binder
+    -- other-modules:
+    -- other-extensions:
+    build-depends:
+          base ^>=4.17.2.0
+        , lens
+    hs-source-dirs:   src
+    default-language: Haskell2010
+
+test-suite binder-test
+    import:           depends, warnings
+    default-language: Haskell2010
+    other-modules:
+          Binder1Spec
+        , Binder2Spec
+    -- other-extensions:
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Spec.hs
+    build-depends:
+          base ^>=4.17.2.0
+        , binder
+        , hspec
+    build-tool-depends: hspec-discover:hspec-discover
