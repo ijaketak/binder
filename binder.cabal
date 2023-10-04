@@ -1,35 +1,35 @@
-cabal-version:      3.4
+cabal-version:      3.0
 name:               binder
-version:            0.0.0.0
+version:            0.1
 synopsis:           Variable binding for abstract syntax tree
 description:
-    binder is purely functional implementation of Ocaml's bindlib.
-    <https://github.com/rlepigre/ocaml-bindlib>
+    binder is purely functional implementation of Ocaml's
+    <https://github.com/rlepigre/ocaml-bindlib bindlib>.
     It follows the style of higher-order abstract syntax,
     and offers the representation of abstract syntax tree.
 license:            MIT
 license-file:       LICENSE
-author:             Keito Kajitani
-maintainer:         ijaketak@gmail.com
+author:             Keito Kajitani <ijaketak@gmail.com>
+maintainer:         Keito Kajitani <ijaketak@gmail.com>
 copyright:          (c) 2023 Keito Kajitani
 homepage:           https://github.com/ijaketak/binder
 category:           Data
 build-type:         Simple
-extra-doc-files:    CHANGELOG.md
 tested-with:
       GHC == 9.2.8
     , GHC == 9.4.7
     , GHC == 9.6.3
+extra-doc-files:    CHANGELOG.md
 -- extra-source-files:
 
 source-repository head
-  type:     git
-  location: https://github.com/ijaketak/binder
+    type:     git
+    location: https://github.com/ijaketak/binder
 
 source-repository this
-  type:     git
-  location: https://github.com/ijaketak/binder
-  tag:      0.0.0.0
+    type:     git
+    location: https://github.com/ijaketak/binder
+    tag:      0.1
 
 common depends
     build-depends:
@@ -66,4 +66,5 @@ test-suite binder-test
           base < 4.19
         , binder
         , hspec < 2.12
-    build-tool-depends: hspec-discover:hspec-discover
+    build-tool-depends:
+          hspec-discover:hspec-discover < 2.12
