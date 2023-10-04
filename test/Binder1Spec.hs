@@ -37,15 +37,15 @@ instance MonadNumbering S where
 
 data Term
   = Term'Var (Var S Term)
-  | Term'Abs (Binder Term Term)
+  | Term'Abs (Binder Term S Term)
   | Term'App Term Term
 
 instance MkFree S Term where
-  mkFree = Term'Var
+  mkFree = return . Term'Var
 
 var :: Var S Term -> Box S Term
 var = boxVar
-absRaw :: Box S (Binder Term Term) -> Box S Term
+absRaw :: Box S (Binder Term S Term) -> Box S Term
 absRaw = fmap Term'Abs
 abs :: Var S Term -> Box S Term -> Box S Term
 abs x t = absRaw $ bind x t
@@ -56,11 +56,13 @@ boxTerm (Term'Var x) = return $ var x
 boxTerm (Term'Abs b) = absRaw <$> boxBinder boxTerm b
 boxTerm (Term'App t u) = app <$> boxTerm t <*> boxTerm u
 
-eval :: Term -> Term
-eval t@(Term'App f a) = case eval f of
-  Term'Abs b -> eval (subst b a)
-  _ -> t
-eval t = t
+eval :: Term -> S Term
+eval t@(Term'App f a) = do
+  ef <- eval f
+  case ef of
+    Term'Abs b -> eval =<< subst b a
+    _ -> return t
+eval t = return t
 
 size :: Term -> S Int
 size (Term'Var _) = return 0
@@ -87,17 +89,17 @@ showTerm (Term'App t u) = do
 termIdentity, termFst, termDelta, termOmega :: S Term
 termIdentity = do
   x <- newVar "x"
-  return $ unbox $ abs x $ var x
+  unbox $ abs x $ var x
 termFst = do
   x <- newVar "x"
   y <- newVar "y"
-  return $ unbox $ abs x $ abs y $ var x
+  unbox $ abs x $ abs y $ var x
 termDelta = do
   x <- newVar "x"
-  return $ unbox $ abs x $ app (var x) (var x)
+  unbox $ abs x $ app (var x) (var x)
 termOmega = do
   delta <- box <$> termDelta
-  return $ unbox $ app delta delta
+  unbox $ app delta delta
 
 spec :: Spec
 spec = do
