@@ -48,10 +48,10 @@ data Te
   | Te'Lam (Binder Ty S Te)
   | Te'Spe Te Ty
 
-instance MkFree S Ty where
-  mkFree = return . Ty'Var
-instance MkFree S Te where
-  mkFree = return . Te'Var
+ty'mkFree :: Var S Ty -> S Ty
+ty'mkFree = return . Ty'Var
+te'mkFree :: Var S Te -> S Te
+te'mkFree = return . Te'Var
 
 ty'Var :: Var S Ty -> Box S Ty
 ty'Var = boxVar
@@ -209,19 +209,19 @@ showTe (Te'Spe t a) = do
 type1, type2 :: S Ty
 term1 :: S Te
 type1 = do
-  x <- newVar "X"
-  y <- newVar "Y"
+  x <- newVar "X" ty'mkFree
+  y <- newVar "Y" ty'mkFree
   unbox $ ty'Arr (ty'Var x) (ty'Var y)
 type2 = do
-  x <- newVar "X"
-  y <- newVar "Y"
+  x <- newVar "X" ty'mkFree
+  y <- newVar "Y" ty'mkFree
   let arr = ty'Arr (ty'Var x) (ty'Var y)
   unbox $ ty'All x $ ty'All y $ ty'Arr arr arr
 term1 = do
-  x <- newVar "X"
-  y <- newVar "Y"
-  f <- newVar "f"
-  a <- newVar "a"
+  x <- newVar "X" ty'mkFree
+  y <- newVar "Y" ty'mkFree
+  f <- newVar "f" te'mkFree
+  a <- newVar "a" te'mkFree
   let arr = ty'Arr (ty'Var x) (ty'Var y)
   unbox $ te'Lam x $ te'Lam y $ te'Abs arr f $ te'Abs (ty'Var x) a $
     te'App (te'Var f) (te'Var a)

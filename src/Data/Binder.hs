@@ -24,10 +24,10 @@ module Data.Binder
 -- * Variable and Box
   , Var
   , Box
-  , MkFree(..)
 -- ** Variable
   , var'Key
   , var'Name
+  , var'mkFree
   , var'Box
   , nameOf
   , boxVar
@@ -48,6 +48,7 @@ module Data.Binder
 -- * Variable binding
   , Binder
   , binder'Name
+  , binder'mkFree
   , binder'Body
   , subst
   , buildBinder
@@ -78,6 +79,7 @@ data Var m a = Var
   }
 data VarBody m a = VarBody
   { _varBody'Name :: Text
+  , _varBody'mkFree :: Var m a -> m a
   , _varBody'Box :: Box m a
   }
 -- | Representation of under-construction things
@@ -86,15 +88,11 @@ data Box m a
   = Box'Closed a
   | Box'Env (EnvVar m) (Closure m a)
 
--- | Typeclass for free variable constructor.
-class MkFree m a where
-  mkFree :: Var m a -> m a
-
-data AnyVar m = forall a. MkFree m a => AnyVar (Var m a)
+data AnyVar m = forall a. AnyVar (Var m a)
 type EnvVar m = M.Map (Numbering m) (AnyVar m)
-data AnyMkFree m = forall a. MkFree m a => AnyMkFree a
-type EnvMkFree m = M.Map (Numbering m) (AnyMkFree m)
-newtype Closure m a = Closure { unClosure :: (EnvMkFree m) -> m a }
+data AnyOne = forall a. AnyOne a
+type EnvOne m = M.Map (Numbering m) AnyOne
+newtype Closure m a = Closure { unClosure :: (EnvOne m) -> m a }
 
 instance Functor m => Functor (Closure m) where
   fmap f cla = Closure $ fmap f . unClosure cla
@@ -115,6 +113,8 @@ $(makeLenses ''VarBody)
 
 var'Name :: Lens' (Var m a) Text
 var'Name = var'Body . varBody'Name
+var'mkFree :: Lens' (Var m a) (Var m a -> m a)
+var'mkFree = var'Body . varBody'mkFree
 var'Box :: Lens' (Var m a) (Box m a)
 var'Box = var'Body . varBody'Box
 
@@ -134,15 +134,15 @@ boxVar :: Var m a -> Box m a
 boxVar x = x ^. var'Box
 
 -- | Create a new variable with given name.
-newVar :: forall m a. (MkFree m a, MonadNumbering m) => Text -> m (Var m a)
-newVar name = do
+newVar :: forall m a. MonadNumbering m => Text -> (Var m a -> m a) -> m (Var m a)
+newVar name mkFree = do
   i <- numbering
   let x = let b = Box'Env
                 (M.singleton i $ AnyVar x)
                 (Closure $ \env ->
-                  let f (AnyMkFree y) = pure $ unsafeCoerce y
+                  let f (AnyOne y) = pure $ unsafeCoerce y
                    in f $ fromJust $ M.lookup i env)
-           in Var i $ VarBody name b
+           in Var i $ VarBody name mkFree b
   return x
 
 
@@ -175,7 +175,7 @@ unbox :: forall m a. Monad m => Box m a -> m a
 unbox (Box'Closed t) = pure t
 unbox (Box'Env env cl) = unClosure cl =<< traverse f env
  where
-  f (AnyVar x) = AnyMkFree @m <$> mkFree x
+  f (AnyVar x) = fmap AnyOne $ x ^. var'mkFree $ x
 
 box :: MonadNumbering m => a -> Box m a
 box = pure
@@ -201,6 +201,7 @@ boxT = sequenceA
 --   Essentially, @Binder a m b@ means @a -> m b@.
 data Binder a m b = Binder
   { _binder'Name :: Text
+  , _binder'mkFree :: Var m a -> m a
   , _binder'Body :: a -> m b
   }
 
@@ -211,23 +212,25 @@ subst :: Binder a m b -> a -> m b
 subst b = b ^. binder'Body
 
 -- | unbinding
-unbind :: (MkFree m a, MonadNumbering m) => Binder a m b -> m (Var m a, b)
+unbind :: MonadNumbering m => Binder a m b -> m (Var m a, b)
 unbind b = do
-  x <- newVar $ b ^. binder'Name
+  let mkFree = b ^. binder'mkFree
+  x <- newVar (b ^. binder'Name) mkFree
   y <- subst b =<< mkFree x
   return (x, y)
 
-unbind2 :: (MkFree m a, MonadNumbering m)
+unbind2 :: MonadNumbering m
         => Binder a m b1 -> Binder a m b2 -> m (Var m a, b1, b2)
 unbind2 b1 b2 = do
-  x <- newVar $ b1 ^. binder'Name
-  let v = mkFree x
-  y1 <- subst b1 =<< v
-  y2 <- subst b2 =<< v
+  let mkFree = b1 ^. binder'mkFree
+  x <- newVar (b1 ^. binder'Name) mkFree
+  v <- mkFree x
+  y1 <- subst b1 v
+  y2 <- subst b2 v
   return (x, y1, y2)
 
 -- | Check if two bindings are equal.
-eqBinder :: (MkFree m a, MonadNumbering m)
+eqBinder :: MonadNumbering m
          => (b -> b -> m Bool) -> Binder a m b -> Binder a m b -> m Bool
 eqBinder eq f g = do
   (_, t, u) <- unbind2 f g
@@ -236,21 +239,20 @@ eqBinder eq f g = do
 
 -- | Smart constructor for 'Binder'.
 buildBinder :: Var m a -> (a -> m b) -> Binder a m b
-buildBinder x body = Binder (x ^. var'Name) body
+buildBinder x body = Binder (x ^. var'Name) (x ^. var'mkFree) body
 
 -- | binding
-bind :: (MkFree m a, MonadNumbering m)
-        => Var m a -> Box m b -> Box m (Binder a m b)
+bind :: MonadNumbering m => Var m a -> Box m b -> Box m (Binder a m b)
 bind x (Box'Closed t) = Box'Closed $ buildBinder x $ const $ return t
 bind x (Box'Env vs t) =
   let vs' = M.delete (x ^. var'Key) vs in if length vs' == 0
     then Box'Closed $ buildBinder x $
-      \arg -> unClosure t $ M.singleton (x ^. var'Key) (AnyMkFree arg)
+      \arg -> unClosure t $ M.singleton (x ^. var'Key) (AnyOne arg)
     else Box'Env vs' $ Closure $
       \ms -> return $ buildBinder x $
-      \arg -> unClosure t $ M.insert (x ^. var'Key) (AnyMkFree arg) ms
+      \arg -> unClosure t $ M.insert (x ^. var'Key) (AnyOne arg) ms
 
-boxBinder :: (MkFree m a, MonadNumbering m)
+boxBinder :: MonadNumbering m
           => (b -> m (Box m b)) -> Binder a m b -> m (Box m (Binder a m b))
 boxBinder f b = do
   (x, t) <- unbind b

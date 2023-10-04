@@ -40,8 +40,8 @@ data Term
   | Term'Abs (Binder Term S Term)
   | Term'App Term Term
 
-instance MkFree S Term where
-  mkFree = return . Term'Var
+term'mkFree :: Var S Term -> S Term
+term'mkFree = return . Term'Var
 
 var :: Var S Term -> Box S Term
 var = boxVar
@@ -88,14 +88,14 @@ showTerm (Term'App t u) = do
 
 termIdentity, termFst, termDelta, termOmega :: S Term
 termIdentity = do
-  x <- newVar "x"
+  x <- newVar "x" term'mkFree
   unbox $ abs x $ var x
 termFst = do
-  x <- newVar "x"
-  y <- newVar "y"
+  x <- newVar "x" term'mkFree
+  y <- newVar "y" term'mkFree
   unbox $ abs x $ abs y $ var x
 termDelta = do
-  x <- newVar "x"
+  x <- newVar "x" term'mkFree
   unbox $ abs x $ app (var x) (var x)
 termOmega = do
   delta <- box <$> termDelta
