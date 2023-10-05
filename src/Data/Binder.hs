@@ -45,6 +45,8 @@ module Data.Binder
   , boxPair
   , boxTriple
   , boxT
+  , boxList
+  , boxJoin
 -- * Variable binding
   , Binder
   , binder'Name
@@ -56,9 +58,32 @@ module Data.Binder
   , unbind
   , eqBinder
   , boxBinder
+  , bindApply
+-- * List
+-- * Variable list
+  , VarList
+  , varList'Keys
+  , varList'Names
+  , varList'Boxes
+  , namesOf
+  , boxVarList
+  , newVarList
+-- * Binder for list
+  , BinderList
+  , binderList'Names
+  , binderList'Body
+  , binderList'mkFree
+  , binderList'Arity
+  , substList
+  , eqBinderList
+  , bindList
+  , unbindList
+  , boxBinderList
+  , bindListApply
   ) where
 
 import Control.Lens
+import Control.Monad (join)
 import Data.Kind (Type)
 import qualified Data.Map.Lazy as M
 import Data.Maybe (fromJust)
@@ -100,6 +125,9 @@ instance Functor m => Functor (Closure m) where
 instance Applicative m => Applicative (Closure m) where
   pure a = Closure $ const $ pure a
   clf <*> cla = Closure $ \env -> unClosure clf env <*> unClosure cla env
+
+closureJoin :: Monad m => Closure m (m a) -> Closure m a
+closureJoin cl = Closure $ \env -> join $ unClosure cl env
 
 instance MonadNumbering m => Eq (Var m a) where
   Var x _ == Var y _ = x == y
@@ -161,7 +189,7 @@ instance Functor m => Functor (Box m) where
   fmap f (Box'Closed a) = Box'Closed (f a)
   fmap f (Box'Env vs ta) = Box'Env vs (f <$> ta)
 
-instance (MonadNumbering m) => Applicative (Box m) where
+instance MonadNumbering m => Applicative (Box m) where
   pure = Box'Closed
   Box'Closed f <*> Box'Closed a = Box'Closed (f a)
   Box'Closed f <*> Box'Env va ta = Box'Env va (f <$> ta)
@@ -195,6 +223,11 @@ boxTriple :: MonadNumbering m => Box m a -> Box m b -> Box m c -> Box m (a, b, c
 boxTriple = boxApply3 (,,)
 boxT :: (MonadNumbering m, Traversable t) => t (Box m a) -> Box m (t a)
 boxT = sequenceA
+boxList :: MonadNumbering m => [Box m a] -> Box m [a]
+boxList = sequenceA
+boxJoin :: MonadNumbering m => Box m (m a) -> m (Box m a)
+boxJoin (Box'Closed ma) = return . Box'Closed =<< ma
+boxJoin (Box'Env env cl) = return $ Box'Env env $ closureJoin cl
 
 
 -- | Variable binding.
@@ -258,3 +291,115 @@ boxBinder f b = do
   (x, t) <- unbind b
   ft <- f t
   return $ bind x ft
+
+bindApply :: MonadNumbering m => Box m (Binder a m b) -> Box m a -> m (Box m b)
+bindApply b arg = boxJoin $ subst <$> b <*> arg
+
+
+type VarList m a = [Var m a]
+
+varList'Keys :: Getter (VarList m a) [Numbering m]
+varList'Keys = to $ fmap $ view var'Key
+varList'Names :: Getter (VarList m a) [Text]
+varList'Names = to $ fmap $ view var'Name
+varList'Boxes :: Getter (VarList m a) [Box m a]
+varList'Boxes = to $ fmap $ view var'Box
+
+-- | The names of variables.
+namesOf :: VarList m a -> [Text]
+namesOf = fmap $ view var'Name
+
+-- | Smart constructor for a list of 'Box'.
+boxVarList :: VarList m a -> [Box m a]
+boxVarList = fmap $ view var'Box
+
+-- | Create new variables with given names.
+newVarList :: MonadNumbering m => [Text] -> (Var m a -> m a) -> m (VarList m a)
+newVarList names mkFree = sequence $ flip fmap names $ \name -> newVar name mkFree
+
+
+-- | Essentially, @BinderList a m b@ means @[a] -> m b@.
+data BinderList a m b = BinderList
+  { _binderList'Names :: [Text]
+  , _binderList'mkFree :: Var m a -> m a
+  , _binderList'Body :: [a] -> m b
+  }
+
+$(makeLenses ''BinderList)
+
+binderList'Arity :: Getter (BinderList a m b) Int
+binderList'Arity = binderList'Names . to length
+
+-- | Variable substitution.
+substList :: BinderList a m b -> [a] -> m b
+substList ba = ba ^. binderList'Body
+
+-- | unbinding
+unbindList :: MonadNumbering m => BinderList a m b -> m (VarList m a, b)
+unbindList ba = do
+  let mkFree = ba ^. binderList'mkFree
+  xs <- newVarList (ba ^. binderList'Names) mkFree
+  y <- substList ba =<< traverse mkFree xs
+  return (xs, y)
+
+unbind2List :: MonadNumbering m
+             => BinderList a m b1 -> BinderList a m b2
+             -> m (VarList m a, b1, b2)
+unbind2List ba1 ba2 = do
+  let mkFree = ba1 ^. binderList'mkFree
+  xs <- newVarList (ba1 ^. binderList'Names) mkFree
+  vs <- traverse mkFree xs
+  y1 <- substList ba1 vs
+  y2 <- substList ba2 vs
+  return (xs, y1, y2)
+
+-- | Check if two bindings are equal.
+eqBinderList :: MonadNumbering m
+              => (b -> b -> m Bool)
+              -> BinderList a m b -> BinderList a m b -> m Bool
+eqBinderList eq f g =
+  if f ^. binderList'Arity /= g ^. binderList'Arity
+    then return False
+    else do
+      (_, t, u) <- unbind2List f g
+      eq t u
+
+-- | Smart constructor for 'BinderList.
+buildBinderList :: VarList m a -> ([a] -> m b) -> BinderList a m b
+buildBinderList xs body =
+  BinderList (xs ^. varList'Names) (head xs ^. var'mkFree) body
+
+deleteList :: Ord k => [k] -> M.Map k a -> M.Map k a
+deleteList = flip $ foldl $ \m k -> M.delete k m
+insertList :: Ord k => [k] -> [a] -> M.Map k a -> M.Map k a
+insertList ks xs m = foldl f m $ zip ks xs
+ where
+  f n (k, x) = M.insert k x n
+zipList :: Ord k => [k] -> [a] -> M.Map k a
+zipList ks xs = insertList ks xs M.empty
+
+-- | binding
+bindList :: MonadNumbering m
+          => VarList m a -> Box m b -> Box m (BinderList a m b)
+bindList xs (Box'Closed t) = Box'Closed $ buildBinderList xs $ const $ return t
+bindList xs (Box'Env vs t) =
+  let vs' = deleteList (xs ^. varList'Keys) vs in if length vs' == 0
+    then Box'Closed $ buildBinderList xs $
+      \args -> unClosure t $
+      zipList (xs ^. varList'Keys) (AnyOne <$> args)
+    else Box'Env vs' $ Closure $
+      \ms -> return $ buildBinderList xs $
+      \args -> unClosure t $
+      insertList (xs ^. varList'Keys) (AnyOne <$> args) ms
+
+boxBinderList :: MonadNumbering m
+               => (b -> m (Box m b)) -> BinderList a m b
+               -> m (Box m (BinderList a m b))
+boxBinderList f b = do
+  (xs, t) <- unbindList b
+  ft <- f t
+  return $ bindList xs ft
+
+bindListApply :: MonadNumbering m
+              => Box m (BinderList a m b) -> Box m [a] -> m (Box m b)
+bindListApply b args = boxJoin $ substList <$> b <*> args

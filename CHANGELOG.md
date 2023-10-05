@@ -4,6 +4,7 @@
 
 ### 0.2 -- still not released
 
+* Add operations for list.
 * Integrate mkFree function into Var and Binder.
 * Now MkFree requires monadic instance.
 * Binder requires Monad typeclass.
