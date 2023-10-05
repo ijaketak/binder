@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               binder
-version:            0.1
+version:            0.2
 synopsis:           Variable binding for abstract syntax tree
 description:
     binder is purely functional implementation of Ocaml's
@@ -29,7 +29,7 @@ source-repository head
 source-repository this
     type:     git
     location: https://github.com/ijaketak/binder
-    tag:      0.1
+    tag:      0.2
 
 common depends
     build-depends:

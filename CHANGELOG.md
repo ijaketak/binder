@@ -2,7 +2,7 @@
 
 ## version 0
 
-### 0.2 -- still not released
+### 0.2 -- 2023-10-06
 
 * Add operations for list.
 * Integrate mkFree function into Var and Binder.
