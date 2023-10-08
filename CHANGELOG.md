@@ -2,6 +2,10 @@
 
 ## version 0
 
+### 0.3 (still not released)
+
+* `newVarList`: Refactoring.
+
 ### 0.2.1 -- 2023-10-09
 
 * Expose the functions `unbind2` and `unbind2List`.

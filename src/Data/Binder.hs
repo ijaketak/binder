@@ -317,7 +317,7 @@ boxVarList = fmap $ view var'Box
 
 -- | Create new variables with given names.
 newVarList :: MonadNumbering m => [Text] -> (Var m a -> m a) -> m (VarList m a)
-newVarList names mkFree = sequence $ flip fmap names $ \name -> newVar name mkFree
+newVarList names mkFree = flip traverse names $ flip newVar mkFree
 
 
 -- | Essentially, @BinderList a m b@ means @[a] -> m b@.
