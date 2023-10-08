@@ -56,6 +56,7 @@ module Data.Binder
   , buildBinder
   , bind
   , unbind
+  , unbind2
   , eqBinder
   , boxBinder
   , bindApply
@@ -78,6 +79,7 @@ module Data.Binder
   , eqBinderList
   , bindList
   , unbindList
+  , unbind2List
   , boxBinderList
   , bindListApply
   ) where
