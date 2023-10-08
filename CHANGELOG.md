@@ -2,7 +2,7 @@
 
 ## version 0
 
-### 0.2.1 (still not released)
+### 0.2.1 -- 2023-10-09
 
 * Expose the functions `unbind2` and `unbind2List`.
 
