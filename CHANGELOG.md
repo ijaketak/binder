@@ -4,6 +4,7 @@
 
 ### 0.3 (still not released)
 
+* Add new functions `copyVar` and `copyVarList`.
 * `newVarList`: Refactoring.
 
 ### 0.2.1 -- 2023-10-09

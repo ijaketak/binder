@@ -32,6 +32,7 @@ module Data.Binder
   , nameOf
   , boxVar
   , newVar
+  , copyVar
   , isClosed
   , occur
 -- ** Box
@@ -69,6 +70,7 @@ module Data.Binder
   , namesOf
   , boxVarList
   , newVarList
+  , copyVarList
 -- * Binder for list
   , BinderList
   , binderList'Names
@@ -164,16 +166,24 @@ boxVar :: Var m a -> Box m a
 boxVar x = x ^. var'Box
 
 -- | Create a new variable with given name.
-newVar :: forall m a. MonadNumbering m => Text -> (Var m a -> m a) -> m (Var m a)
+newVar :: MonadNumbering m => Text -> (Var m a -> m a) -> m (Var m a)
 newVar name mkFree = do
   i <- numbering
+  buildVar i name mkFree
+
+copyVar :: MonadNumbering m => Var m b -> (Var m a -> m a) -> m (Var m a)
+copyVar x mkFree = buildVar (x ^. var'Key) (x ^. var'Name) mkFree
+
+buildVar :: MonadNumbering m => Numbering m -> Text -> (Var m a -> m a)
+         -> m (Var m a)
+buildVar i name mkFree =
   let x = let b = Box'Env
                 (M.singleton i $ AnyVar x)
                 (Closure $ \env ->
                   let f (AnyOne y) = pure $ unsafeCoerce y
                    in f $ fromJust $ M.lookup i env)
            in Var i $ VarBody name mkFree b
-  return x
+   in return x
 
 
 -- | 'Box' is closed if it exposes no free variables.
@@ -318,6 +328,9 @@ boxVarList = fmap $ view var'Box
 -- | Create new variables with given names.
 newVarList :: MonadNumbering m => [Text] -> (Var m a -> m a) -> m (VarList m a)
 newVarList names mkFree = flip traverse names $ flip newVar mkFree
+
+copyVarList :: MonadNumbering m => VarList m b -> (Var m a -> m a) -> m (VarList m a)
+copyVarList xs mkFree = flip traverse xs $ flip copyVar mkFree
 
 
 -- | Essentially, @BinderList a m b@ means @[a] -> m b@.
